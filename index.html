@@ -2,19 +2,23 @@
 <html lang="zh">
 <head>
   <meta charset="UTF-8">
-  <title>实验室器材管理系统</title>
+  <title>RMT实验室器材管理系统</title>
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
   <style>
-    body { font-family: Arial, sans-serif; margin: 20px; }
-    input, select { margin: 5px; padding: 5px; }
-    button { padding: 5px 10px; margin: 5px; }
-    table { border-collapse: collapse; margin-top: 20px; }
-    th, td { border: 1px solid #ccc; padding: 5px 10px; }
+    body { font-family: "微软雅黑", Arial, sans-serif; margin: 20px; background: #f7f8fa; color: #333; }
+    input, select, button { margin: 5px; padding: 6px; font-size: 14px; }
+    button { cursor: pointer; background: #4a90e2; border: none; color: white; border-radius: 4px; transition: background 0.2s; }
+    button:hover { background: #357ab7; }
+    table { border-collapse: collapse; margin-top: 20px; width: 100%; background: white; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: center; }
+    th { background: #4a90e2; color: white; position: sticky; top: 0; z-index: 2; }
     .hidden { display: none; }
+    #tableDiv { max-height: 600px; overflow-y: auto; }
+    #choiceDiv, #searchDiv, #formDiv { margin-bottom: 15px; }
   </style>
 </head>
 <body>
-<h1>实验室器材管理系统</h1>
+<h1>RMT实验室器材管理系统</h1>
 <div id="userInfo">未登录</div>
 
 <div id="choiceDiv">
@@ -41,14 +45,28 @@
   <button onclick="hideAll()">取消</button>
 </div>
 
+<!-- 登出 -->
 <div>
-  <button onclick="logout()">登出</button>
+  <button id="logoutBtn" onclick="logout()" class="hidden">登出</button>
 </div>
 
-<!-- 搜索 -->
+<!-- 搜索和分类筛选 -->
 <div id="searchDiv" class="hidden">
   <input type="text" id="searchInput" placeholder="搜索器材">
-  <button onclick="loadItems()">搜索</button>
+  <select id="categoryFilter" onchange="loadItems()">
+    <option value="">全部分类</option>
+    <option value="透镜">透镜</option>
+    <option value="分光片剂">分光片</option>
+    <option value="棱镜">棱镜</option>
+    <option value="反射镜">反射镜</option>
+    <option value="带通/长通/短通滤光片">带通/长通/短通滤光片</option>
+    <option value="机械结构">机械结构</option>
+    <option value="电气装置">电气装置</option>
+    <option value="水路装置">水路装置</option>
+    <option value="成套设备">成套设备</option>
+    <option value="其他">其他</option>
+  </select>
+  <button type="button" onclick="loadItems()">搜索</button>
 </div>
 
 <!-- 添加/编辑器材 -->
@@ -60,6 +78,19 @@
   <input type="text" id="model" placeholder="型号">
   <input type="text" id="parameters" placeholder="主要参数">
   <input type="text" id="manufacturer" placeholder="厂家">
+  <select id="category">
+    <option value="">请选择分类</option>
+    <option>透镜</option>
+    <option>分光片</option>
+    <option>棱镜</option>
+    <option>反射镜</option>
+    <option>带通/长通/短通滤光片</option>
+    <option>机械结构</option>
+    <option>电气装置</option>
+    <option>水路装置</option>
+    <option>成套设备</option>
+    <option>其他</option>
+  </select>
   <input type="number" id="price" placeholder="单价">
   <input type="number" id="quantity" placeholder="数量">
   <input type="text" id="location" placeholder="存放地点">
@@ -74,11 +105,16 @@
     <thead>
       <tr>
         <th>采购日期</th><th>名称</th><th>型号</th><th>参数</th><th>厂家</th>
-        <th>单价</th><th>数量</th><th>总价</th><th>办理人</th><th>存放地点</th><th>备注</th><th>操作</th>
+        <th>分类</th><th>单价</th><th>数量</th><th>总价</th><th>办理人</th><th>存放地点</th><th>备注</th><th>操作</th>
       </tr>
     </thead>
     <tbody></tbody>
   </table>
+  <div style="margin-top:10px; text-align:center;">
+    <button onclick="prevPage()">上一页</button>
+    <span id="pageInfo"></span>
+    <button onclick="nextPage()">下一页</button>
+  </div>
 </div>
 
 <script>
@@ -89,78 +125,60 @@ const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 let currentUser = null;
 let currentUsername = "";
 let currentRole = "user";
+let currentPage = 1;
+const pageSize = 50;
+let allData = [];
 
-function showLogin() {
-  document.getElementById("loginDiv").classList.remove("hidden");
-  document.getElementById("signupDiv").classList.add("hidden");
-}
-function showSignup() {
-  document.getElementById("signupDiv").classList.remove("hidden");
-  document.getElementById("loginDiv").classList.add("hidden");
-}
-function hideAll() {
-  document.getElementById("loginDiv").classList.add("hidden");
-  document.getElementById("signupDiv").classList.add("hidden");
-}
+function showLogin() { document.getElementById("loginDiv").classList.remove("hidden"); document.getElementById("signupDiv").classList.add("hidden"); }
+function showSignup() { document.getElementById("signupDiv").classList.remove("hidden"); document.getElementById("loginDiv").classList.add("hidden"); }
+function hideAll() { document.getElementById("loginDiv").classList.add("hidden"); document.getElementById("signupDiv").classList.add("hidden"); }
 
 async function signup() {
-  const username = document.getElementById("signupUsername").value.trim();
-  const email = document.getElementById("signupEmail").value.trim();
-  const password = document.getElementById("signupPassword").value.trim();
-  if (!username || !email || !password) { alert("请完整填写注册信息"); return; }
-
-  let { data, error } = await supabase.auth.signUp({
-    email,
-    password,
-    options: { data: { username } }
-  });
-  if (error) alert("注册失败: " + error.message);
-  else { alert("注册成功，请登录"); hideAll(); }
+  const username=document.getElementById("signupUsername").value.trim();
+  const email=document.getElementById("signupEmail").value.trim();
+  const password=document.getElementById("signupPassword").value.trim();
+  if(!username||!email||!password){ alert("请完整填写注册信息"); return; }
+  let {data,error}=await supabase.auth.signUp({email,password,options:{data:{username}}});
+  if(error) alert("注册失败: "+error.message); else { alert("注册成功，请登录"); hideAll(); }
 }
 
 async function login() {
-  const email = document.getElementById("loginEmail").value.trim();
-  const password = document.getElementById("loginPassword").value.trim();
-  if (!email || !password) { alert("请输入邮箱和密码"); return; }
-
-  let { data, error } = await supabase.auth.signInWithPassword({ email, password });
-  if (error) alert("登录失败: " + error.message);
-  else {
-    currentUser = data.user;
-    await fetchUser();
-    alert("登录成功");
-    document.getElementById("searchDiv").classList.remove("hidden");
-    document.getElementById("formDiv").classList.remove("hidden");
-    document.getElementById("tableDiv").classList.remove("hidden");
-    hideAll();
-    loadItems();
-  }
+  const email=document.getElementById("loginEmail").value.trim();
+  const password=document.getElementById("loginPassword").value.trim();
+  if(!email||!password){ alert("请输入邮箱和密码"); return; }
+  let {data,error}=await supabase.auth.signInWithPassword({email,password});
+  if(error) alert("登录失败: "+error.message);
+  else { currentUser=data.user; await fetchUser(); alert("登录成功"); showLoggedInUI(); loadItems(); hideAll(); }
 }
 
 async function fetchUser() {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (user) {
+  const {data:{user}} = await supabase.auth.getUser();
+  if(user){
     currentUser = user;
-    const { data: profile } = await supabase
-      .from("lab_profiles")
-      .select("username,role")
-      .eq("id", user.id)
-      .single();
+    const {data:profile} = await supabase.from("lab_profiles").select("username,role").eq("id",user.id).single();
     currentUsername = profile?.username || user.email;
     currentRole = profile?.role || 'user';
-    document.getElementById("userInfo").innerText = "已登录: " + currentUsername + " (" + currentRole + ")";
+    document.getElementById("userInfo").innerText = "已登录: "+currentUsername+" ("+currentRole+")";
   }
 }
 
+function showLoggedInUI(){
+  document.getElementById("choiceDiv").classList.add("hidden");
+  document.getElementById("logoutBtn").classList.remove("hidden");
+  document.getElementById("searchDiv").classList.remove("hidden");
+  document.getElementById("formDiv").classList.remove("hidden");
+  document.getElementById("tableDiv").classList.remove("hidden");
+}
+
 async function logout() {
-  const { error } = await supabase.auth.signOut();
-  if (error) alert("登出失败: " + error.message);
-  else {
+  const {error} = await supabase.auth.signOut();
+  if(error) alert("登出失败: "+error.message);
+  else{
     alert("已登出");
-    currentUser = null;
-    currentUsername = "";
-    currentRole = "user";
-    document.getElementById("userInfo").innerText = "未登录";
+    currentUser=null; currentUsername=""; currentRole="user";
+    document.getElementById("userInfo").innerText="未登录";
+    document.getElementById("choiceDiv").classList.remove("hidden");
+    document.getElementById("logoutBtn").classList.add("hidden");
     document.getElementById("searchDiv").classList.add("hidden");
     document.getElementById("formDiv").classList.add("hidden");
     document.getElementById("tableDiv").classList.add("hidden");
@@ -168,100 +186,146 @@ async function logout() {
 }
 
 function clearForm() {
-  document.getElementById("formTitle").innerText = "添加器材";
-  document.getElementById("itemId").value = "";
-  ["purchase_date","name","model","parameters","manufacturer","price","quantity","location","notes"].forEach(id => document.getElementById(id).value = "");
+  document.getElementById("formTitle").innerText="添加器材";
+  document.getElementById("itemId").value="";
+  ["purchase_date","name","model","parameters","manufacturer","category","price","quantity","location","notes"].forEach(id=>document.getElementById(id).value="");
 }
+
 
 async function saveItem() {
   if (!currentUser) { alert("请先登录"); return; }
+  const id = document.getElementById("itemId").value;
 
-  const item = {
+  let oldItem = null;
+  if (id) {
+    const { data } = await supabase.from("lab_items").select("*").eq("id", id).single();
+    oldItem = data || null;
+  }
+
+  const newData = {
     purchase_date: document.getElementById("purchase_date").value,
     name: document.getElementById("name").value,
     model: document.getElementById("model").value,
     parameters: document.getElementById("parameters").value,
     manufacturer: document.getElementById("manufacturer").value,
+    category: document.getElementById("category").value,
     price: parseFloat(document.getElementById("price").value || 0),
     quantity: parseInt(document.getElementById("quantity").value || 0),
-    total: parseFloat(document.getElementById("price").value || 0) * parseInt(document.getElementById("quantity").value || 0),
-    handler: currentUsername,
     location: document.getElementById("location").value,
-    notes: document.getElementById("notes").value,
-    user_id: currentUser.id
   };
+  newData.total = newData.price * newData.quantity;
 
-  const id = document.getElementById("itemId").value;
+  // 办理人和 user_id 保持不变
+  newData.handler = oldItem ? oldItem.handler : currentUsername;
+  newData.user_id = oldItem ? oldItem.user_id : currentUser.id;
+
+  // 修改日志
+  let notesLog = oldItem ? "" : "";
+  if (id && oldItem) {
+    const changes = [];
+    ["purchase_date","name","model","parameters","manufacturer","category","price","quantity","location"].forEach(f => {
+      if ((oldItem[f] || "") != (newData[f] || "")) {
+        changes.push(`字段【${f}】:\n  修改前: ${oldItem[f] || ""}\n  修改后: ${newData[f] || ""}`);
+      }
+    });
+
+    if (changes.length > 0) {
+      const timestamp = new Date().toLocaleString();
+      const logEntry = `修改时间: ${timestamp}\n修改人: ${currentUsername}\n${changes.join("\n")}\n---\n`;
+      notesLog = (oldItem.notes || "") + "\n" + logEntry;
+    } else {
+      notesLog = oldItem.notes || "";
+    }
+  }
+  newData.notes = notesLog;
+
   let res;
-  if (id) res = await supabase.from("lab_items").update(item).eq("id", id);
-  else res = await supabase.from("lab_items").insert([item]);
+  if (id) res = await supabase.from("lab_items").update(newData).eq("id", id);
+  else res = await supabase.from("lab_items").insert([newData]);
 
-  if (res.error) alert("保存失败: " + res.error.message);
-  else { alert("保存成功"); clearForm(); loadItems(); }
+  if (res.error) {
+    alert("保存失败: " + res.error.message);
+  } else {
+    alert("保存成功");
+    clearForm();
+    loadItems();
+  }
 }
 
-async function loadItems() {
-  if (!currentUser) return;
-
-  let query = supabase.from("lab_items").select("*").order("created_at", { ascending: false });
-  const keyword = document.getElementById("searchInput").value.trim();
-  if (keyword) query = query.ilike("name", `%${keyword}%`);
-
-  // 普通用户只能看到自己的数据
-  if (currentRole !== "admin") query = query.eq("user_id", currentUser.id);
-
-  const { data, error } = await query;
-  if (error) { alert("加载失败: " + error.message); return; }
-
-  const tbody = document.querySelector("#itemsTable tbody");
-  tbody.innerHTML = "";
-  data.forEach(row => {
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
+// 分页渲染
+function renderTable(){
+  const tbody=document.querySelector("#itemsTable tbody");
+  tbody.innerHTML="";
+  const start=(currentPage-1)*pageSize;
+  const end=start+pageSize;
+  const pageData=allData.slice(start,end);
+  pageData.forEach(row=>{
+    const tr=document.createElement("tr");
+    tr.innerHTML=`
       <td>${row.purchase_date||""}</td>
       <td>${row.name||""}</td>
       <td>${row.model||""}</td>
       <td>${row.parameters||""}</td>
       <td>${row.manufacturer||""}</td>
+      <td>${row.category||""}</td>
       <td>${row.price||0}</td>
       <td>${row.quantity||0}</td>
       <td>${row.total||0}</td>
       <td>${row.handler||""}</td>
       <td>${row.location||""}</td>
-      <td>${row.notes||""}</td>
+      <td><button type="button" onclick="showNotes('${encodeURIComponent(row.notes||"")}')">详情</button></td>
       <td>
-        <button onclick="editItem(${row.id})">编辑</button>
-        ${currentRole==='admin' || row.user_id===currentUser.id ? `<button onclick="deleteItem(${row.id})">删除</button>` : ""}
-      </td>
-    `;
+          <button type="button" onclick="editItem(${row.id})">编辑</button>
+  ${
+    currentRole === 'admin' || row.user_id === currentUser?.id
+      ? `<button type="button" onclick="deleteItem(${row.id},'${row.user_id}')">删除</button>`
+      : ""
+  }
+      </td>`;
     tbody.appendChild(tr);
   });
+  const totalPages=Math.ceil(allData.length/pageSize)||1;
+  document.getElementById("pageInfo").innerText=`第 ${currentPage} 页 / 共 ${totalPages} 页`;
 }
 
-function editItem(id) {
-  const row = document.querySelector(`#itemsTable tbody tr:nth-child(${id})`);
-  // 简单逻辑：根据 id 查询表数据
-  supabase.from("lab_items").select("*").eq("id", id).single().then(({data,error})=>{
-    if(error) alert("加载失败"); 
-    else{
-      document.getElementById("formTitle").innerText="编辑器材";
-      document.getElementById("itemId").value = data.id;
-      ["purchase_date","name","model","parameters","manufacturer","price","quantity","location","notes"].forEach(field=>{
-        document.getElementById(field).value=data[field]||"";
-      });
-    }
-  });
+
+async function loadItems(){
+  if(!currentUser) return;
+  let query=supabase.from("lab_items").select("*").order("created_at",{ascending:false});
+  const keyword=document.getElementById("searchInput").value.trim();
+  const category=document.getElementById("categoryFilter").value;
+  if(keyword) query=query.or(`name.ilike.%${keyword}%,model.ilike.%${keyword}%`);
+  if(category) query=query.eq("category",category);
+  const {data,error}=await query;
+  if(error){ alert("加载失败: "+error.message); return; }
+  allData=data; currentPage=1; renderTable();
 }
 
-async function deleteItem(id) {
-  if (!confirm("确定删除吗？")) return;
-  const { error } = await supabase.from("lab_items").delete().eq("id", id);
-  if (error) alert("删除失败: " + error.message);
+function nextPage(){ const totalPages=Math.ceil(allData.length/pageSize); if(currentPage<totalPages){ currentPage++; renderTable(); } }
+function prevPage(){ if(currentPage>1){ currentPage--; renderTable(); } }
+
+function editItem(id){ supabase.from("lab_items").select("*").eq("id",id).single().then(({data,error})=>{ if(error) alert("加载失败"); else{ document.getElementById("formTitle").innerText="编辑器材"; document.getElementById("itemId").value=data.id; ["purchase_date","name","model","parameters","manufacturer","category","price","quantity","location","notes"].forEach(f=>document.getElementById(f).value=data[f]||""); } }); }
+
+async function deleteItem(id, user_id){
+  if(!confirm("确定删除吗？")) return;
+  if(currentRole!=='admin' && currentUser.id!==user_id){
+    alert("你没有权限删除此条目");
+    return;
+  }
+  const {error}=await supabase.from("lab_items").delete().eq("id",id);
+  if(error) alert("删除失败: "+error.message);
   else { alert("删除成功"); loadItems(); }
 }
 
+
+// 弹窗显示备注（换行格式化）
+function showNotes(encoded) {
+  const notes = decodeURIComponent(encoded);
+  alert(notes.replace(/\n/g, "\n"));
+}
+
 // 页面加载检查用户
-fetchUser().then(()=>{ if(currentUser){ document.getElementById("searchDiv").classList.remove("hidden"); document.getElementById("formDiv").classList.remove("hidden"); document.getElementById("tableDiv").classList.remove("hidden"); loadItems(); }});
+fetchUser().then(()=>{ if(currentUser) showLoggedInUI(); loadItems(); });
 </script>
 </body>
 </html>
