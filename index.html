@@ -5,117 +5,218 @@
   <title>RMT实验室器材管理系统</title>
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
   <style>
-    body { font-family: "微软雅黑", Arial, sans-serif; margin: 20px; background: #f7f8fa; color: #333; }
-    input, select, button { margin: 5px; padding: 6px; font-size: 14px; }
-    button { cursor: pointer; background: #4a90e2; border: none; color: white; border-radius: 4px; transition: background 0.2s; }
-    button:hover { background: #357ab7; }
-    table { border-collapse: collapse; margin-top: 20px; width: 100%; background: white; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-    th, td { border: 1px solid #ccc; padding: 8px; text-align: center; }
-    th { background: #4a90e2; color: white; position: sticky; top: 0; z-index: 2; }
+    body {
+      font-family: "微软雅黑", Arial, sans-serif;
+      margin: 0;
+      background: #f0f2f5;
+      color: #333;
+    }
+    h1 {
+      text-align: center;
+      color: #2a6ebd;
+      margin: 20px 0;
+    }
+    .section {
+      background: #fff;
+      padding: 15px 20px;
+      margin: 15px;
+      border-radius: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+    .section h3 {
+      margin: 0 0 15px;
+      border-left: 4px solid #2a6ebd;
+      padding-left: 10px;
+      color: #2a6ebd;
+      font-size: 16px;
+    }
+    input, select, button {
+      padding: 8px 10px;
+      font-size: 14px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      transition: all 0.2s;
+    }
+    input:focus, select:focus {
+      border-color: #2a6ebd;
+      outline: none;
+      box-shadow: 0 0 3px rgba(42,110,189,0.4);
+    }
+    button {
+      cursor: pointer;
+      background: #2a6ebd;
+      border: none;
+      color: white;
+      border-radius: 6px;
+      padding: 8px 16px;
+      margin-right: 8px;
+    }
+    button:hover { background: #1e4f8b; }
+    #choiceDiv button, #logoutSection button { margin-top: 5px; }
+    /* 工具栏：搜索 + 筛选横排 */
+    #searchDiv {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+    }
+    #searchDiv input, #searchDiv select {
+      width: auto;
+      min-width: 150px;
+      flex: 1;
+    }
+    #searchDiv button { flex-shrink: 0; }
+    /* 表单：两列布局 */
+    #formDiv {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 10px 20px;
+    }
+    #formDiv h3 {
+      grid-column: 1 / -1;
+    }
+    #formDiv button {
+      grid-column: span 1;
+      margin-top: 10px;
+    }
+    /* 表格 */
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      background: white;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    th, td {
+      border: 1px solid #eee;
+      padding: 10px;
+      text-align: center;
+      font-size: 14px;
+    }
+    th {
+      background: #2a6ebd;
+      color: white;
+      position: sticky;
+      top: 0;
+      z-index: 2;
+    }
+    tr:nth-child(even) { background: #fafafa; }
+    tr:hover { background: #f1f8ff; }
+    #tableDiv { max-height: 500px; overflow-y: auto; }
+    #pagination { margin-top: 10px; text-align: center; }
+    #pagination button { margin: 0 5px; }
     .hidden { display: none; }
-    #tableDiv { max-height: 600px; overflow-y: auto; }
-    #choiceDiv, #searchDiv, #formDiv { margin-bottom: 15px; }
+    #userInfo {
+      text-align: right;
+      margin: 0 20px;
+      color: #555;
+      font-size: 14px;
+    }
   </style>
 </head>
 <body>
-<h1>RMT实验室器材管理系统</h1>
-<div id="userInfo">未登录</div>
+  <h1>RMT实验室器材管理系统</h1>
+<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+  <div id="userInfo">未登录</div>
+  <div id="logoutSection" class="hidden">
+    <button id="logoutBtn" onclick="logout()">登出</button>
+  </div>
+</div>
 
 <div id="choiceDiv">
   <button onclick="showLogin()">登录</button>
   <button onclick="showSignup()">注册</button>
 </div>
-
-<!-- 登录 -->
-<div id="loginDiv" class="hidden">
-  <h3>登录</h3>
-  <input type="email" id="loginEmail" placeholder="邮箱">
-  <input type="password" id="loginPassword" placeholder="密码">
-  <button onclick="login()">登录</button>
-  <button onclick="hideAll()">取消</button>
-</div>
-
-<!-- 注册 -->
-<div id="signupDiv" class="hidden">
-  <h3>注册</h3>
-  <input type="text" id="signupUsername" placeholder="请输入真实姓名">
-  <input type="email" id="signupEmail" placeholder="邮箱">
-  <input type="password" id="signupPassword" placeholder="密码">
-  <button onclick="signup()">注册</button>
-  <button onclick="hideAll()">取消</button>
-</div>
-
-<!-- 登出 -->
-<div>
-  <button id="logoutBtn" onclick="logout()" class="hidden">登出</button>
-</div>
-
-<!-- 搜索和分类筛选 -->
-<div id="searchDiv" class="hidden">
-  <input type="text" id="searchInput" placeholder="搜索器材">
-  <select id="categoryFilter" onchange="loadItems()">
-    <option value="">全部分类</option>
-    <option value="透镜">透镜</option>
-    <option value="分光片剂">分光片</option>
-    <option value="棱镜">棱镜</option>
-    <option value="反射镜">反射镜</option>
-    <option value="带通/长通/短通滤光片">带通/长通/短通滤光片</option>
-    <option value="机械结构">机械结构</option>
-    <option value="电气装置">电气装置</option>
-    <option value="水路装置">水路装置</option>
-    <option value="成套设备">成套设备</option>
-    <option value="其他">其他</option>
-  </select>
-  <button type="button" onclick="loadItems()">搜索</button>
-</div>
-
-<!-- 添加/编辑器材 -->
-<div id="formDiv" class="hidden">
-  <h3 id="formTitle">添加器材</h3>
-  <input type="hidden" id="itemId">
-  <input type="date" id="purchase_date" placeholder="采购日期">
-  <input type="text" id="name" placeholder="元件名称">
-  <input type="text" id="model" placeholder="型号">
-  <input type="text" id="parameters" placeholder="主要参数">
-  <input type="text" id="manufacturer" placeholder="厂家">
-  <select id="category">
-    <option value="">请选择分类</option>
-    <option>透镜</option>
-    <option>分光片</option>
-    <option>棱镜</option>
-    <option>反射镜</option>
-    <option>带通/长通/短通滤光片</option>
-    <option>机械结构</option>
-    <option>电气装置</option>
-    <option>水路装置</option>
-    <option>成套设备</option>
-    <option>其他</option>
-  </select>
-  <input type="number" id="price" placeholder="单价">
-  <input type="number" id="quantity" placeholder="数量">
-  <input type="text" id="location" placeholder="存放地点">
-  <input type="text" id="notes" placeholder="备注">
-  <button onclick="saveItem()">保存</button>
-  <button onclick="clearForm()">取消</button>
-</div>
-
-<!-- 数据表格 -->
-<div id="tableDiv" class="hidden">
-  <table id="itemsTable">
-    <thead>
-      <tr>
-        <th>采购日期</th><th>名称</th><th>型号</th><th>参数</th><th>厂家</th>
-        <th>分类</th><th>单价</th><th>数量</th><th>总价</th><th>办理人</th><th>存放地点</th><th>备注</th><th>操作</th>
-      </tr>
-    </thead>
-    <tbody></tbody>
-  </table>
-  <div style="margin-top:10px; text-align:center;">
-    <button onclick="prevPage()">上一页</button>
-    <span id="pageInfo"></span>
-    <button onclick="nextPage()">下一页</button>
+  <!-- 登录 -->
+  <div id="loginDiv" class="hidden section">
+    <h3>登录</h3>
+    <input type="email" id="loginEmail" placeholder="邮箱">
+    <input type="password" id="loginPassword" placeholder="密码">
+    <button onclick="login()">登录</button>
+    <button onclick="hideAll()">取消</button>
   </div>
-</div>
+
+  <!-- 注册 -->
+  <div id="signupDiv" class="hidden section">
+    <h3>注册</h3>
+    <input type="text" id="signupUsername" placeholder="请输入真实姓名">
+    <input type="email" id="signupEmail" placeholder="邮箱">
+    <input type="password" id="signupPassword" placeholder="密码">
+    <button onclick="signup()">注册</button>
+    <button onclick="hideAll()">取消</button>
+  </div>
+
+
+  <!-- 搜索和分类筛选 -->
+  <div id="searchDiv" class="hidden section">
+    <input type="text" id="searchInput" placeholder="搜索器材">
+    <select id="categoryFilter" onchange="loadItems()">
+      <option value="">全部分类</option>
+      <option value="透镜">透镜</option>
+      <option value="分光片">分光片</option>
+      <option value="棱镜">棱镜</option>
+      <option value="反射镜">反射镜</option>
+      <option value="带通/长通/短通滤光片">带通/长通/短通滤光片</option>
+      <option value="机械结构">机械结构</option>
+      <option value="电气装置">电气装置</option>
+      <option value="水路装置">水路装置</option>
+      <option value="成套设备">成套设备</option>
+      <option value="其他">其他</option>
+    </select>
+    <select id="handlerFilter" onchange="loadItems()">
+      <option value="">全部办理人</option>
+    </select>
+    <button type="button" onclick="loadItems()">搜索</button>
+  </div>
+
+  <!-- 添加/编辑器材 -->
+  <div id="formDiv" class="hidden section">
+    <h3 id="formTitle">添加器材</h3>
+    <input type="hidden" id="itemId">
+    <input type="date" id="purchase_date" placeholder="采购日期">
+    <input type="text" id="name" placeholder="元件名称">
+    <input type="text" id="model" placeholder="型号">
+    <input type="text" id="parameters" placeholder="主要参数">
+    <input type="text" id="manufacturer" placeholder="厂家">
+    <select id="category">
+      <option value="">请选择分类</option>
+      <option>透镜</option>
+      <option>分光片</option>
+      <option>棱镜</option>
+      <option>反射镜</option>
+      <option>带通/长通/短通滤光片</option>
+      <option>机械结构</option>
+      <option>电气装置</option>
+      <option>水路装置</option>
+      <option>成套设备</option>
+      <option>其他</option>
+    </select>
+    <input type="number" id="price" placeholder="单价">
+    <input type="number" id="quantity" placeholder="数量">
+    <input type="text" id="location" placeholder="存放地点">
+    <input type="text" id="notes" placeholder="备注">
+    <button onclick="saveItem()">保存</button>
+    <button onclick="clearForm()">取消</button>
+  </div>
+
+  <!-- 数据表格 -->
+  <div id="tableDiv" class="hidden section">
+    <h3>器材清单</h3>
+    <table id="itemsTable">
+      <thead>
+        <tr>
+          <th>采购日期</th><th>名称</th><th>型号</th><th>参数</th><th>厂家</th>
+          <th>分类</th><th>单价</th><th>数量</th><th>总价</th><th>办理人</th><th>存放地点</th><th>备注</th><th>操作</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+    <div id="pagination">
+      <button onclick="prevPage()">上一页</button>
+      <span id="pageInfo"></span>
+      <button onclick="nextPage()">下一页</button>
+    </div>
+  </div>
 
 <script>
 const SUPABASE_URL = "https://nsrrcrrbtwvtuvmtifdu.supabase.co";
@@ -164,7 +265,7 @@ async function fetchUser() {
 
 function showLoggedInUI(){
   document.getElementById("choiceDiv").classList.add("hidden");
-  document.getElementById("logoutBtn").classList.remove("hidden");
+  document.getElementById("logoutSection").classList.remove("hidden");
   document.getElementById("searchDiv").classList.remove("hidden");
   document.getElementById("formDiv").classList.remove("hidden");
   document.getElementById("tableDiv").classList.remove("hidden");
@@ -178,7 +279,7 @@ async function logout() {
     currentUser=null; currentUsername=""; currentRole="user";
     document.getElementById("userInfo").innerText="未登录";
     document.getElementById("choiceDiv").classList.remove("hidden");
-    document.getElementById("logoutBtn").classList.add("hidden");
+    document.getElementById("logoutSection").classList.add("hidden");
     document.getElementById("searchDiv").classList.add("hidden");
     document.getElementById("formDiv").classList.add("hidden");
     document.getElementById("tableDiv").classList.add("hidden");
@@ -294,11 +395,28 @@ async function loadItems(){
   let query=supabase.from("lab_items").select("*").order("created_at",{ascending:false});
   const keyword=document.getElementById("searchInput").value.trim();
   const category=document.getElementById("categoryFilter").value;
+  const handler=document.getElementById("handlerFilter").value;
   if(keyword) query=query.or(`name.ilike.%${keyword}%,model.ilike.%${keyword}%`);
   if(category) query=query.eq("category",category);
+  if(handler) query=query.eq("handler",handler);
   const {data,error}=await query;
   if(error){ alert("加载失败: "+error.message); return; }
   allData=data; currentPage=1; renderTable();
+}
+
+async function loadHandlers(){
+  const { data, error } = await supabase.from("lab_items").select("handler", { distinct: true });
+  if(error) { console.error(error); return; }
+  const handlerSelect = document.getElementById("handlerFilter");
+  handlerSelect.innerHTML = '<option value="">全部办理人</option>';
+  data.forEach(row=>{
+    if(row.handler){
+      let opt = document.createElement("option");
+      opt.value = row.handler;
+      opt.textContent = row.handler;
+      handlerSelect.appendChild(opt);
+    }
+  });
 }
 
 function nextPage(){ const totalPages=Math.ceil(allData.length/pageSize); if(currentPage<totalPages){ currentPage++; renderTable(); } }
@@ -325,7 +443,8 @@ function showNotes(encoded) {
 }
 
 // 页面加载检查用户
-fetchUser().then(()=>{ if(currentUser) showLoggedInUI(); loadItems(); });
+fetchUser().then(()=>{ if(currentUser) showLoggedInUI(); loadItems();loadHandlers() });
 </script>
 </body>
 </html>
+
